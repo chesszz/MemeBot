@@ -22,24 +22,90 @@ FORMATS = ("png", "gif", "jpg")
 global say_hi 
 say_hi = True
 
-# Generates meme list statically, check that the formats are restricted
-# meme_list stores all the memes with extensions
-# meme_name_dict stores the pairs of meme names : meme names with extensions so that the user doesn't have to input 
-# Only need dict if we allow the user to specify the file that they want
+########################################################################################
+########################################################################################
 
-meme_list = [meme for meme in os.listdir(MEMEPATH) if meme[-3:].lower() in FORMATS]
-meme_name_dict = {meme.split(".")[0].lower() : meme for meme in meme_list}
+# Macro to print stuff
+async def printC(ch, msg):
+    return await client.send_message(ch, msg)
 
-nsfw_meme_list = [nsfw_meme for nsfw_meme in os.listdir(NSFWMEMEPATH) if nsfw_meme[-3:].lower() in FORMATS]
-nsfw_meme_name_dict = {nsfw_meme.split(".")[0].lower() : nsfw_meme for nsfw_meme in nsfw_meme_list}
+# Does a scout with 1% UR, 9% SR, 90% R
+def scout():
+    num = random.random()
+    if num < 0.01:
+        return "UR"
+    elif num < 0.1:
+        return "SR"
+    else:
+        return "R"
 
+def scout2():
+    num = random.random()
+    if num < 0.1:
+        return "UR"
+    else:
+        return "SR"
+
+def generate_memelists(path):
+    # Generates meme list statically, check that the formats are restricted
+    # meme_list stores all the memes with extensions
+    # meme_name_dict stores the pairs of meme names : meme names with extensions so that the user doesn't have to input 
+    # Only need dict if we allow the user to specify the file that they want
+
+    meme_list = [meme for meme in os.listdir(path) if meme[-3:].lower() in FORMATS]
+
+    meme_name_dict = {meme.split(".")[0].lower() : meme for meme in meme_list}
+
+    # Stores the filename and the time modified 
+    meme_list_mod = [[filename, time.time() -  os.stat(os.path.join(path, meme_name_dict[filename])).st_mtime] for filename in meme_name_dict]
+    # Splits into 2 lists, old and new. The cutoff is 3 days from now.
+    # New memes have the :new: tag added
+    meme_list_old = [file for file in meme_list_mod if file[1] > 3600*24*3]
+    meme_list_new = [[(file[0] + " :new:"), file[1]] for file in meme_list_mod if file[1] <= 3600*24*3]
+
+    # Sort old memes by name, new memes by time
+    # Combine the list together
+    meme_list_old.sort(key=lambda x: x[0])
+    meme_list_new.sort(key=lambda x: x[1])
+    meme_list_mix = [file[0] for file in meme_list_new] + [file[0] for file in meme_list_old]
+
+    return meme_list, meme_name_dict, meme_list_mix
+
+async def return_named_meme(ch, msg, memelist, namedict, path, err_msg):
+    msg_split = msg.split()
+
+    # Gives a random meme if only the main command (e.g . "!meme") is given 
+    if len(msg_split) == 1:
+        filename = random.choice(memelist)
+        await client.send_file(ch, os.path.join(path, filename))
+
+    # Otherwise, if the user has requested a specific one
+    # We will only take the first part of msg_split because there are only 2 parts, the command and the filename
+    elif len(msg_split) == 2:
+        filename = msg_split[1]
+
+        # If the user has specified a full filename with extension, then we simply retrieve that file
+        if "." in filename: 
+            await client.send_file(ch, os.path.join(path, filename))
+        # Otherwise, if the user only gave the name, then we use the dictionary to get the full filename with extension
+        else: 
+            await client.send_file(ch, os.path.join(path, namedict[filename]))
+
+    # User entered >1 words in the meme name
+    else:
+        await printC(ch, err_msg) 
+
+########################################################################################
+########################################################################################
+
+meme_list, meme_name_dict, meme_list_mix = generate_memelists(MEMEPATH)
+nsfw_meme_list, nsfw_meme_name_dict, nsfw_meme_list_mix = generate_memelists(NSFWMEMEPATH)
 towel_meme_list = [towel_meme for towel_meme in meme_list if "towel" in towel_meme]
 
 # For this one, we also strip out the "feelsgood" at the start, so feelsgoodeli.png --> eli
 # User can just type !feelsgood eli
 feelsgood_list = [feelsgood for feelsgood in meme_list if feelsgood.startswith("feelsgood")]
 feelsgood_name_dict = {feelsgood.split(".")[0][9:].lower() : feelsgood for feelsgood in feelsgood_list}
-
 
 # Takes all timezones and make a dict with the small letter version as the key
 all_timezones_dict = {tz.lower() : tz for tz in pytz.all_timezones}
@@ -72,50 +138,11 @@ usage = ''' Hi! I am MemeBot created by Chezz and developed using discord.py.
 !shigure <searchterm>: Searches for a random anime on MAL and replaces a random word with Shigure
 '''
 
-# Macro to print stuff
-async def printC(ch, msg):
-    return await client.send_message(ch, msg)
+inform_msg = "{0.mention}, please check your direct message inbox for a list of memes."
 
-# Does a scout with 1% UR, 9% SR, 90% R
-def scout():
-    num = random.random()
-    if num < 0.01:
-        return "UR"
-    elif num < 0.1:
-        return "SR"
-    else:
-        return "R"
 
-def scout2():
-    num = random.random()
-    if num < 0.1:
-        return "UR"
-    else:
-        return "SR"
-
-async def return_named_meme(ch, msg, memelist, namedict, path, err_msg):
-    msg_split = msg.split()
-
-    # Gives a random meme if only the main command (e.g . "!meme") is given 
-    if len(msg_split) == 1:
-        filename = random.choice(memelist)
-        await client.send_file(ch, os.path.join(path, filename))
-
-    # Otherwise, if the user has requested a specific one
-    # We will only take the first part of msg_split because there are only 2 parts, the command and the filename
-    elif len(msg_split) == 2:
-        filename = msg_split[1]
-
-        # If the user has specified a full filename with extension, then we simply retrieve that file
-        if "." in filename: 
-            await client.send_file(ch, os.path.join(path, filename))
-        # Otherwise, if the user only gave the name, then we use the dictionary to get the full filename with extension
-        else: 
-            await client.send_file(ch, os.path.join(path, namedict[filename]))
-
-    # User entered >1 words in the meme name
-    else:
-        await printC(ch, err_msg) 
+########################################################################################
+########################################################################################
 
 
 @client.event
@@ -132,13 +159,155 @@ async def on_message(message):
         await printC(ch, "Hi! MemeBot has logged in at {0}".format(time.strftime("%A, UTC %d %b %Y %H:%M:%S", time.gmtime())))
         say_hi = False
 
+    ### PINGS THE BOT ###
+    # MUST BE FIRST BECAUSE IT HAS IF INSTEAD OF ELIF #
+    if msg == "!ping":
+        await printC(ch, "pong")
+
+    elif msg == "!hello":
+        await printC(ch, "Hello {0.mention} onii-sama!".format(message.author))
+
+    ################################ HELP MESSAGES #################################
+
+    # Activated by the 2 commands or by mentioning
+    elif msg in ("!helpmeme", "!meme help") or client.user in message.mentions:
+        # If not in PM already, tells the user to look at his PM box
+        if not str(ch).startswith("Direct Message with"):
+            await printC(ch, inform_msg.format(message.author))
+        # Send usage instruction
+        await client.send_message(message.author, usage)
+
+    ### LIST OF POSSIBLE MEMES ###
+    elif msg == "!listmemes":
+        # If not in PM already, tells the user to look at his PM box
+        if not str(ch).startswith("Direct Message with"):
+            await printC(ch, inform_msg.format(message.author))
+        await printC(message.author, "***The following comands can be used with !meme [meme_name] to show a specific meme.***")
+        await printC(message.author, "-----------------------------------------------------------------------------------")
+        #await printC(message.author, "\n".join(sorted(meme_name_dict.keys())))
+        await printC(message.author, "\n".join(meme_list_mix))
+        await printC(message.author, "Additional information: You can @mention me or type '!meme help'/'!helpmeme' to get the full list of comamnds")
+
+    ### LIST OF POSSIBLE NSFW MEMES ###
+    elif msg == "!listnsfwmemes":
+        if not str(ch).startswith("Direct Message with"):
+            await printC(ch, inform_msg.format(message.author))
+        await printC(message.author, "***The following comands can be used with !nsfwmeme [meme_name] to show a specific NSFW meme.***")
+        await printC(message.author, "-----------------------------------------------------------------------------------")
+        await printC(message.author, "\n".join(sorted(nsfw_meme_name_dict.keys())))
+        await printC(message.author, "Additional information: You can @mention me or type '!meme help'/'!helpmeme' to get the full list of comamnds")
+
+    ################################ CORE MEME FUNCTIONALITY #################################
+
+    ### GENERATES A RANDOM MEME ###
+    elif msg.startswith(("!meme","!maymay")):
+        await return_named_meme(ch, msg, memelist=meme_list, namedict=meme_name_dict, path=MEMEPATH, 
+                                err_msg="Error! Input syntax '!meme [meme_name]'")
+
+    ### GENERATES A RANDOM NSFW MEME ###
+    elif msg.startswith(("!nsfwmeme","!nsfwmaymay")):
+        await return_named_meme(ch, msg, memelist=nsfw_meme_list, namedict=nsfw_meme_name_dict, path=NSFWMEMEPATH, 
+                                err_msg="Error! Input syntax '!nsfwmeme [nsfw_meme_name]'")
+
+    ### SENDS A RANDOM FEELSGOOD MEME ###
+    elif msg.startswith("!feelsgood"):
+        await return_named_meme(ch, msg, memelist=feelsgood_list, namedict=feelsgood_name_dict, path=MEMEPATH, 
+                                err_msg="Error! Input syntax '!feelsgood [member_name]'")
+
+    ### GENERATES A RANDOM TOWEL MEME ###
+    elif msg == "!towelmeme":
+        meme = random.choice(towel_meme_list)
+        await client.send_file(ch, os.path.join(MEMEPATH, meme))
+
+    ### TELLS PEOPLE NOT TO HONK ###
+    elif msg == "!honk":
+        await client.send_file(ch, os.path.join(MEMEPATH, "dont_honk.jpg"))
+
+    elif msg == "!!brainpower":
+        await printC(ch, "おーおおおおおおおおああああえーあーあーいーあーうーじょお - おおおおおおおおおおおおああえーおーあーあーうーうーあーえ - えええーええーえええああああえーあーえーいーえーあーじょおーおおおーおおーおお - おおええええおーあーあああーああああ")
+
+    elif msg == "!tsun":
+        # Use requests to get the page, convert to HTML
+        # Use BeautifulSoup to parse the HTML and pick out the script tags
+        r = requests.get('https://www.instagram.com/tsuntsunlive/')
+        html = r.content
+        soup = bs4.BeautifulSoup(html, 'html.parser')
+        tag_list = soup.find_all("script",type="text/javascript")
+
+        # Find the longest script tag (super primitive and super breakable method....)
+        tag_list = [str(tag) for tag in tag_list]
+        tag_list = sorted(tag_list, key=len)
+        data_tag = tag_list[-1]
+
+        # Each 'caption' means a separate post
+        # Chop out the first one because the first one is before the first post
+        post_list = re.split('"caption":"', data_tag)[1:]
+        post = random.choice(post_list)
+
+        # Find the end of the caption by the start of the next field, "likes"
+        caption = post[:re.search('","likes"', post).start()]
+        # Remove mu's
+        caption = re.sub(r"#\\u03bc's ", "", caption)
+        # Remove all other unicode characters of the form "#\u[4 letters/numbers]" and possibly a space
+        caption = re.sub(r"#?\\u[0-9a-f]{4} ?", "", caption)
+
+        cap_split = caption.partition("#")
+        caption = cap_split[0] + "😍😍😘😘😄😄😃😃😀😀😊😊☺☺😉😉😚😚😗😗😙😙😳😳😣😣😻😻😽😽💛💛💙💙💜💜💚💚❤❤💗💗💓💓💕💕💖💖💞💞💘💘💌💌💋💋" + "".join(cap_split[1:])
+
+        # Find the start of image url by the "display_src" field 
+        img_part = post[re.search('"display_src":"', post).end():]
+        # Chop off at the "?"  part because after that is some authentication thing
+        img = img_part[:re.search("\?", img_part).start()]
+        # Remove backslashes
+        img = re.sub(r"\\", "", img)
+
+        await printC(ch, img)
+        await printC(ch, caption)
+
+    # Searches a random anime on MAL, replaces a random word with Shigure
+    elif msg.startswith("!shigure"):
+        cmd, space, search = msg.partition(" ")
+        if search == "":
+            await printC(ch, "Please enter a valid search term.")
+            await printC(ch, "Usage: !shigure <any string to be searched on MAL>")
+
+        else:
+            base_url="http://myanimelist.net/api/anime/search.xml?q="
+            # Takes the search terms, split by space and add "+" instead
+            search_plus = "+".join(search.split(" "))
+
+            # Searches on MAL, gets the response and parses the XML obtained
+            req = requests.get(base_url + search_plus, auth=(credentials["MAL_user"], credentials["MAL_pass"]))
+            tree = ElementTree.fromstring(req.content)
+
+            # Repeat up to 3 times if the anime is 1 word long
+            for trial in range(3):
+                # Top level is by anime, so we choose a random anime
+                anime_choice = random.randrange(len(tree))
+                # The [1] refers to the 2nd entry in each anime tag, containing the title
+                title = tree[anime_choice][1].text
+                # Replace a random word with Shigure
+                title_words = title.split(" ")
+                # Use this title if it has >1 word title
+                if len(title_words) > 1:
+                    break
+
+            switch_index = random.randrange(len(title_words))
+            title_words[switch_index] = "Shigure"
+
+            await printC(ch, " ".join(title_words))
+
+    ################################ RANDOM SIDE FUNCTIONALITY #################################
 
     ### CHOOSES FROM A LIST OF OPTIONS ###
-    if msg.startswith("!choose"):
+    elif msg.startswith("!choose"):
         # Splits based on the first space, we are concerned with the part after. 
         choose, space, after = msg_or.partition(" ")
 
         try:
+            # Chop off the "!choose" part to determine the number of times
+            # If not specified, default to 1
+            # Max times can only be 10
             times = int(choose[7:])
             if times > 10:
                 times = 10
@@ -155,7 +324,7 @@ async def on_message(message):
                 await printC(ch, "I chose {0}!".format(random.choice(choices).strip()))
 
     ### RANKS A LIST OF OPTIONS ###
-    if msg.startswith("!rank"):
+    elif msg.startswith("!rank"):
         # Splits based on the first space, we are concerned with the part after. 
         rank, space, after = msg_or.partition(" ")
 
@@ -174,15 +343,11 @@ async def on_message(message):
                 out_str += "**{0}**. {1}\n".format(i + 1, item.strip())
             await printC(ch, out_str)
 
-
-    elif msg == "!hello":
-        await printC(ch, "Hello {0.mention} onii-sama!".format(message.author))
-
     # If message ends with \o\ and not sent by MemeBot, we reply the opposite
-    elif msg[-3:] == "\\o\\" and message.author != client.user:
+    elif msg.endswith("\\o\\") and message.author != client.user:
         await printC(ch, "/o/")
 
-    elif msg[-3:] == "/o/" and message.author != client.user:
+    elif msg.endswith("/o/") and message.author != client.user:
         await printC(ch, "\\o\\")
 
     # Outputs the current time in either GMT or an aribtrary time zone (can be multiple)
@@ -235,94 +400,6 @@ async def on_message(message):
             for tz in timezones:
                 await printC(ch, "The time for {0} is {1}".format(tz[0], utc_now.astimezone(tz[1]).strftime("%A, %d %B %Y %I:%M:%S %p")))
 
-        ### HELP MESSAGE ###
-    elif msg in ("!helpmeme", "!meme help") or client.user in message.mentions:
-        if not str(ch).startswith("Direct Message with"):
-            await printC(ch, "{0.mention}, please check your direct message inbox for a list of instructions.".format(message.author))
-        await client.send_message(message.author, usage)
-
-    ### LIST OF POSSIBLE MEMES ###
-    elif msg == "!listmemes":
-        if not str(ch).startswith("Direct Message with"):
-            await printC(ch, "{0.mention}, please check your direct message inbox for a list of memes.".format(message.author))
-        await printC(message.author, "***The following comands can be used with !meme [meme_name] to show a specific meme.***")
-        await printC(message.author, "-----------------------------------------------------------------------------------")
-        await printC(message.author, "\n".join(sorted(meme_name_dict.keys())))
-        await printC(message.author, "Additional information: You can @mention me or type '!meme help'/'!helpmeme' to get the full list of comamnds")
-
-    ### LIST OF POSSIBLE NSFW MEMES ###
-    elif msg == "!listnsfwmemes":
-        if not str(ch).startswith("Direct Message with"):
-            await printC(ch, "{0.mention}, please check your direct message inbox for a list of NSFW memes.".format(message.author))
-        await printC(message.author, "***The following comands can be used with !nsfwmeme [meme_name] to show a specific NSFW meme.***")
-        await printC(message.author, "-----------------------------------------------------------------------------------")
-        await printC(message.author, "\n".join(sorted(nsfw_meme_name_dict.keys())))
-        await printC(message.author, "Additional information: You can @mention me or type '!meme help'/'!helpmeme' to get the full list of comamnds")
-
-
-    ### GENERATES A RANDOM MEME ###
-    elif msg.startswith(("!meme","!maymay")):
-        await return_named_meme(ch, msg, memelist=meme_list, namedict=meme_name_dict, path=MEMEPATH, 
-                                err_msg="Error! Input syntax '!meme [meme_name]'")
-
-        # msg_split = msg.split()
-
-        # # Gives a random meme if only "!meme" is given 
-        # if len(msg_split) == 1:
-        #     filename = random.choice(meme_list)
-        #     await client.send_file(ch, os.path.join(MEMEPATH, filename))
-
-        # # Otherwise, if the user has requested a specific one
-        # elif len(msg_split) == 2:
-        #     filename = msg_split[1]
-        #     # If the user has specified a full filename with extension, then we simply retrieve that file
-        #     if "." in filename: 
-        #         await client.send_file(ch, os.path.join(MEMEPATH, filename))
-        #     # Otherwise, if the user only gave the name, then we use the dictionary to get the full filename with extension
-        #     else: 
-        #         await client.send_file(ch, os.path.join(MEMEPATH, meme_name_dict[filename]))
-        # else:
-        #     await printC(ch, "Error! Input syntax '!meme [meme_name]'")
-
-    ### GENERATES A RANDOM NSFW MEME ###
-    elif msg.startswith(("!nsfwmeme","!nsfwmaymay")):
-        msg_split = msg.split()
-
-        # Gives a random meme if only "!meme" is given 
-        if len(msg_split) == 1:
-            filename = random.choice(nsfw_meme_list)
-            await client.send_file(ch, os.path.join(NSFWMEMEPATH, filename))
-
-        # Otherwise, if the user has requested a specific one
-        elif len(msg_split) == 2:
-            filename = msg_split[1]
-            # If the user has specified a full filename with extension, then we simply retrieve that file
-            if "." in filename: 
-                await client.send_file(ch, os.path.join(NSFWMEMEPATH, filename))
-            # Otherwise, if the user only gave the name, then we use the dictionary to get the full filename with extension
-            else: 
-                await client.send_file(ch, os.path.join(NSFWMEMEPATH, nsfw_meme_name_dict[filename]))
-        else:
-            await printC(ch, "Error! Input syntax '!nsfwmeme [nsfw_meme_name]'")
-
-    ### SENDS A RANDOM FEELSGOOD MEME ###
-    elif msg == "!feelsgood":
-
-        filename = random.choice(feelsgood_list)
-        await client.send_file(ch, os.path.join(MEMEPATH, filename))
-
-    ### GENERATES A RANDOM TOWEL MEME ###
-    elif msg == "!towelmeme":
-        meme = random.choice(towel_meme_list)
-        await client.send_file(ch, os.path.join(MEMEPATH, meme))
-
-    ### TELLS PEOPLE NOT TO HONK ###
-    elif msg == "!honk":
-        await client.send_file(ch, os.path.join(MEMEPATH, "dont_honk.jpg"))
-
-    ### PINGS THE BOT ###
-    elif msg == "!ping":
-        await printC(ch, "pong")
 
     ### DOES A SINGLE HONOR SCOUT ###
     elif msg == "!noobscout":
@@ -345,97 +422,7 @@ async def on_message(message):
         if "UR" in results:
             await printC(ch, "{0.mention} got a UR!!".format(message.author))
 
-    elif msg == "!!brainpower":
-        await printC(ch, "おーおおおおおおおおああああえーあーあーいーあーうーじょお - おおおおおおおおおおおおああえーおーあーあーうーうーあーえ - えええーええーえええああああえーあーえーいーえーあーじょおーおおおーおおーおお - おおええええおーあーあああーああああ")
-
-    elif msg == "!tsun":
-
-        # Use requests to get the page, convert to HTML
-        # Use BeautifulSoup to parse the HTML and pick out the script tags
-        r = requests.get('https://www.instagram.com/tsuntsunlive/')
-        html = r.content
-        soup = bs4.BeautifulSoup(html, 'html.parser')
-        tag_list = soup.find_all("script",type="text/javascript")
-
-        # Find the longest script tag (super primitive and super breakable method....)
-        tag_list = [str(tag) for tag in tag_list]
-        tag_list = sorted(tag_list, key=len)
-        data_tag = tag_list[-1]
-
-
-        # Each 'caption' means a separate post
-        # Chop out the first one because the first one is before the first post
-        post_list = re.split('"caption":"', data_tag)[1:]
-        post = random.choice(post_list)
-
-        # Find the end of the caption by the start of the next field, "likes"
-        caption = post[:re.search('","likes"', post).start()]
-
-        # letters = [letter for letter in caption]
-
-        # for i, letter in enumerate(letters):
-        #     if letter == "\\":
-        #         letters[i] = "\ud83d"
-        #         letters[i+1] = ""
-        #         letters[i+2] = ""
-        #         letters[i+3] = ""
-        #         letters[i+4] = ""
-        #         letters[i+5] = ""    
-        #         print (i)
-        # print (letters)
-        # caption = "".join(letters)
-
-        # Remove mu's
-        caption = re.sub(r"#\\u03bc's ", "", caption)
-        # Remove all other unicode characters of the form "#\u[4 letters/numbers]" and possibly a space
-        caption = re.sub(r"#?\\u[0-9a-f]{4} ?", "", caption)
-
-        cap_split = caption.partition("#")
-        caption = cap_split[0] + "😍😍😘😘😄😄😃😃😀😀😊😊☺☺😉😉😚😚😗😗😙😙😳😳😣😣😻😻😽😽💛💛💙💙💜💜💚💚❤❤💗💗💓💓💕💕💖💖💞💞💘💘💌💌💋💋" + "".join(cap_split[1:])
-
-        # Find the start of image url by the "display_src" field 
-        img_part = post[re.search('"display_src":"', post).end():]
-        # Chop off at the "?"  part because after that is some authentication thing
-        img = img_part[:re.search("\?", img_part).start()]
-        # Remove backslashes
-        img = re.sub(r"\\", "", img)
-
-        await printC(ch, img)
-        await printC(ch, caption)
-
-    # Searches a random anime on MAL, replaces a random word with Shigure
-    elif msg.startswith("!shigure"):
-        cmd, space, search = msg.partition(" ")
-        if search == "":
-            await printC(ch, "Please enter a valid search term.")
-            await printC(ch, "Usage: !shigure <any string to be searched on MAL>")
-
-        else:
-            base_url="http://myanimelist.net/api/anime/search.xml?q="
-            # Takes the search terms, split by space and add "+" instead
-            search_plus = "+".join(search.split(" "))
-
-            # Searches on MAL, gets the response and parses the XML obtained
-            req = requests.get(base_url + search_plus, auth=(credentials["MAL_user"], credentials["MAL_pass"]))
-            tree = ElementTree.fromstring(req.content)
-
-            # Repeat up to 3 times if the anime is 1 word long
-            for trial in range(3):
-                # Top level is by anime, so we choose a random anime
-                anime_choice = random.randrange(len(tree))
-                # The [1] refers to the 2nd entry in each anime tag, containing the title
-                title = tree[anime_choice][1].text
-                # Replace a random word with Shigure
-                title_words = title.split(" ")
-                # Use this title if it has >1 word title
-                if len(title_words) > 1:
-                    break
-
-            switch_index = random.randrange(len(title_words))
-            title_words[switch_index] = "Shigure"
-
-            await printC(ch, " ".join(title_words))
-
+    ################################ CLEANING UP #################################
 
     # Use !quit to tell it to quit. Only authorised users can call this command
     # Optional arguments after !quit : Provide reasons
