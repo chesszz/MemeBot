@@ -95,6 +95,24 @@ async def return_named_meme(ch, msg, memelist, namedict, path, err_msg):
     else:
         await printC(ch, err_msg) 
 
+# Sends a given memelist to a certain user. Needed because of the 2000-character message limit
+# memelist is a list of names
+# user is a User object, usually obtained from message.author
+async def send_memelist(user, memelist):
+    memelist_str_length = len(str(memelist))    # Length of all the strings in the list
+    memelist_length = len(memelist)             # Number of entries in the list
+
+    pieces = memelist_str_length // 2000 + 1    # Split into blocks of 2000 characters
+    piece_length = memelist_length // pieces    # Use this number and split the indices accordingly
+
+    for num in range(pieces):
+        # Last piece may not have a nice round number and so will slice till end of string
+        # Other pieces slice based on the piece length
+        if num == (pieces - 1):
+            await printC(user, "\n".join(memelist[num * piece_length:]))
+        else:
+            await printC(user, "\n".join(memelist[num * piece_length:(num + 1) * piece_length]))
+
 ########################################################################################
 ########################################################################################
 
@@ -182,10 +200,10 @@ async def on_message(message):
         # If not in PM already, tells the user to look at his PM box
         if not str(ch).startswith("Direct Message with"):
             await printC(ch, inform_msg.format(message.author))
+            await printC(ch, "*New feature! !listmemes now identifies the memes that have been added within the last 3 days!*")
         await printC(message.author, "***The following comands can be used with !meme [meme_name] to show a specific meme.***")
         await printC(message.author, "-----------------------------------------------------------------------------------")
-        #await printC(message.author, "\n".join(sorted(meme_name_dict.keys())))
-        await printC(message.author, "\n".join(meme_list_mix))
+        await send_memelist(message.author, meme_list_mix)
         await printC(message.author, "Additional information: You can @mention me or type '!meme help'/'!helpmeme' to get the full list of comamnds")
 
     ### LIST OF POSSIBLE NSFW MEMES ###
@@ -194,7 +212,7 @@ async def on_message(message):
             await printC(ch, inform_msg.format(message.author))
         await printC(message.author, "***The following comands can be used with !nsfwmeme [meme_name] to show a specific NSFW meme.***")
         await printC(message.author, "-----------------------------------------------------------------------------------")
-        await printC(message.author, "\n".join(sorted(nsfw_meme_name_dict.keys())))
+        await send_memelist(message.author, nsfw_meme_list_mix)
         await printC(message.author, "Additional information: You can @mention me or type '!meme help'/'!helpmeme' to get the full list of comamnds")
 
     ################################ CORE MEME FUNCTIONALITY #################################
@@ -344,11 +362,11 @@ async def on_message(message):
             await printC(ch, out_str)
 
     # If message ends with \o\ and not sent by MemeBot, we reply the opposite
-    elif msg.endswith("\\o\\") and message.author != client.user:
-        await printC(ch, "/o/")
+    # elif msg.endswith("\\o\\") and message.author != client.user:
+    #     await printC(ch, "/o/")
 
-    elif msg.endswith("/o/") and message.author != client.user:
-        await printC(ch, "\\o\\")
+    # elif msg.endswith("/o/") and message.author != client.user:
+    #     await printC(ch, "\\o\\")
 
     # Outputs the current time in either GMT or an aribtrary time zone (can be multiple)
     elif msg.startswith("!time"):
