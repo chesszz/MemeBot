@@ -8,6 +8,9 @@ import requests
 import bs4
 import re
 import json
+import pickle
+import asyncio
+import codecs
 from xml.etree import ElementTree
 
 client = discord.Client()
@@ -77,7 +80,7 @@ async def return_named_meme(ch, msg, memelist, namedict, path, err_msg):
     # Gives a random meme if only the main command (e.g . "!meme") is given 
     if len(msg_split) == 1:
         filename = random.choice(memelist)
-        await client.send_file(ch, os.path.join(path, filename))
+        await client.send_file(ch, fp=os.path.join(path, filename))
 
     # Otherwise, if the user has requested a specific one
     # We will only take the first part of msg_split because there are only 2 parts, the command and the filename
@@ -86,10 +89,10 @@ async def return_named_meme(ch, msg, memelist, namedict, path, err_msg):
 
         # If the user has specified a full filename with extension, then we simply retrieve that file
         if "." in filename: 
-            await client.send_file(ch, os.path.join(path, filename))
+            await client.send_file(ch, fp=os.path.join(path, filename))
         # Otherwise, if the user only gave the name, then we use the dictionary to get the full filename with extension
         else: 
-            await client.send_file(ch, os.path.join(path, namedict[filename]))
+            await client.send_file(ch, fp=os.path.join(path, namedict[filename]))
 
     # User entered >1 words in the meme name
     else:
@@ -147,12 +150,12 @@ usage = ''' Hi! I am MemeBot created by Chezz and developed using discord.py.
 !noobscout : Does an honor scout
 !noobscout11 : Does a 10+1 honor scout
 
-!choose <choice1>,<choice2>,<choice3>,... : Choose 1 item from the choices
-!choose[n] <choice1>,<choice2>,<choice3>,... : Choose 1 item from the choices, but repeated n times (n<10)
-!rank <item1>,<item2>,<item3>,... : Ranks the items among the list
+!choose <choice1>,[choice2],[choice3],... : Choose 1 item from the choices
+!choose[n] <choice1>,[choice2],[choice3],... : Choose 1 item from the choices, but repeated n times (n<10)
+!rank <item1>,[item2],[item3],... : Ranks the items among the list
 !honk : THIS IS AGAINST THE RULES. YOU WILL GET BANNED.
 !!brainpower: Note the 2 exclamation marks. BRAIN POWER~~
-!tsun: Copies something from a certain someone's Instagram page
+!tsun [index]: Copies something from a certain someone's Instagram page. If index is specified, we take the index-th post on the page. Otherwise, we take a random post.
 !shigure <searchterm>: Searches for a random anime on MAL and replaces a random word with Shigure
 '''
 
@@ -174,7 +177,7 @@ async def on_message(message):
     # It will say hi to the channel when it first logs in, then prevents it from saying hi again
     # Prevents it from responding to itself
     if say_hi and message.author.id == credentials["admin_ID"]:
-        await printC(ch, "Hi! MemeBot has logged in at {0}".format(time.strftime("%A, UTC %d %b %Y %H:%M:%S", time.gmtime())))
+        await printC(ch, "Hi! {0} has logged in at {1}".format(client.user.name, time.strftime("%A, UTC %d %b %Y %H:%M:%S", time.gmtime())))
         say_hi = False
 
     ### PINGS THE BOT ###
@@ -196,7 +199,7 @@ async def on_message(message):
         await client.send_message(message.author, usage)
 
     ### LIST OF POSSIBLE MEMES ###
-    elif msg == "!listmemes":
+    elif msg in ("!listmemes", "!memelist"):
         # If not in PM already, tells the user to look at his PM box
         if not str(ch).startswith("Direct Message with"):
             await printC(ch, inform_msg.format(message.author))
@@ -218,7 +221,7 @@ async def on_message(message):
     ################################ CORE MEME FUNCTIONALITY #################################
 
     ### GENERATES A RANDOM MEME ###
-    elif msg.startswith(("!meme","!maymay")):
+    elif msg.startswith(("!meme","!maymay", "!meem")):
         await return_named_meme(ch, msg, memelist=meme_list, namedict=meme_name_dict, path=MEMEPATH, 
                                 err_msg="Error! Input syntax '!meme [meme_name]'")
 
@@ -244,7 +247,9 @@ async def on_message(message):
     elif msg == "!!brainpower":
         await printC(ch, "おーおおおおおおおおああああえーあーあーいーあーうーじょお - おおおおおおおおおおおおああえーおーあーあーうーうーあーえ - えええーええーえええああああえーあーえーいーえーあーじょおーおおおーおおーおお - おおええええおーあーあああーああああ")
 
-    elif msg == "!tsun":
+    # Format !tsun [index] to retrive the index'th post ont the instagram page.
+    # If index is not specified, we take any random post.
+    elif msg.startswith("!tsun"):
         # Use requests to get the page, convert to HTML
         # Use BeautifulSoup to parse the HTML and pick out the script tags
         r = requests.get('https://www.instagram.com/tsuntsunlive/')
@@ -257,23 +262,34 @@ async def on_message(message):
         tag_list = sorted(tag_list, key=len)
         data_tag = tag_list[-1]
 
+        # Grab the index, if there is any.
+        cmd, space, after = msg.partition(" ")
+        try:
+            index = int(after)
+        except ValueError:
+            index = None
+
         # Each 'caption' means a separate post
         # Chop out the first one because the first one is before the first post
-        post_list = re.split('"caption":"', data_tag)[1:]
-        post = random.choice(post_list)
+        post_list = re.split('"caption": "', data_tag)[1:]
+
+        # If we have a valid index, we take that post (minus 1 since the list is 0-indexed)
+        # Else, pick a random one.
+        if index is None:
+            post = random.choice(post_list)
+        else:
+            post = post_list[index - 1]
 
         # Find the end of the caption by the start of the next field, "likes"
-        caption = post[:re.search('","likes"', post).start()]
-        # Remove mu's
-        caption = re.sub(r"#\\u03bc's ", "", caption)
-        # Remove all other unicode characters of the form "#\u[4 letters/numbers]" and possibly a space
-        caption = re.sub(r"#?\\u[0-9a-f]{4} ?", "", caption)
-
-        cap_split = caption.partition("#")
-        caption = cap_split[0] + "😍😍😘😘😄😄😃😃😀😀😊😊☺☺😉😉😚😚😗😗😙😙😳😳😣😣😻😻😽😽💛💛💙💙💜💜💚💚❤❤💗💗💓💓💕💕💖💖💞💞💘💘💌💌💋💋" + "".join(cap_split[1:])
+        caption = post[:re.search('", "likes"', post).start()]
+        # Fix all unicode characters of the form "\u[4 letters/numbers]"
+        # http://stackoverflow.com/questions/11944978/call-functions-from-re-sub
+        caption = re.sub(r"(\\u[0-9a-f]{4})", lambda match: codecs.decode(match.group(1), "unicode_escape"), caption)
+        # Fix \n chars
+        caption = re.sub(r"\\n", "\n", caption)
 
         # Find the start of image url by the "display_src" field 
-        img_part = post[re.search('"display_src":"', post).end():]
+        img_part = post[re.search('"display_src": "', post).end():]
         # Chop off at the "?"  part because after that is some authentication thing
         img = img_part[:re.search("\?", img_part).start()]
         # Remove backslashes
@@ -314,6 +330,10 @@ async def on_message(message):
             title_words[switch_index] = "Shigure"
 
             await printC(ch, " ".join(title_words))
+
+    elif msg == "!roasted":
+        await client.send_file(ch, fp=os.path.join(MEMEPATH, "shigure_burn.png"))
+        await printC(ch, ":fire: :fire:")
 
     ################################ RANDOM SIDE FUNCTIONALITY #################################
 
@@ -440,6 +460,80 @@ async def on_message(message):
         if "UR" in results:
             await printC(ch, "{0.mention} got a UR!!".format(message.author))
 
+    ### CLAIMS TAGS WITH YUUDACHI ### 
+    elif msg.startswith("!spamtags") and message.author.id == credentials["admin_ID"]:
+
+        # Format should be !spamtags <start> <end>, so len == 3
+        args = msg.split(" ")
+        if len(args) != 3:
+            print(args)
+            print("Wrong number of args")
+            return
+
+        # Unpack the split list
+        cmd, start, end = args
+
+        # Tries to convert them to int
+        try:
+            start = int(start)
+            end = int(end)
+        except ValueError:
+            print("Start = {0}, End = {1}", start, end)
+            print("Could not convert to int")
+            return
+
+        # Check that start <= end
+        if start > end:
+            print("Start = {0}, End = {1}", start, end)
+            print("Start > End")
+            return
+
+        # Creates the tag for start ~ end, inclusive. 
+        # Wait 1 second after each tag.
+        for i in range(start, end + 1):
+            await printC(ch, "?tag create {0} MemeBot has claimed tag {0}".format(i))
+            await printC(ch, ":pogchamp:")
+            await asyncio.sleep(1)
+
+    ### DELETE TAGS WITH YUUDACHI ### 
+    elif msg.startswith("!deltags") and message.author.id == credentials["admin_ID"]:
+
+        # Format should be !spamtags <start> <end>, so len == 3
+        args = msg.split(" ")
+        if len(args) != 3:
+            print(args)
+            print("Wrong number of args")
+            return
+
+        # Unpack the split list
+        cmd, start, end = args
+
+        # Tries to convert them to int
+        try:
+            start = int(start)
+            end = int(end)
+        except ValueError:
+            print("Start = {0}, End = {1}", start, end)
+            print("Could not convert to int")
+            return
+
+        # Check that start <= end
+        if start > end:
+            print("Start = {0}, End = {1}", start, end)
+            print("Start > End")
+            return
+
+        # Creates the tag for start ~ end, inclusive. 
+        # Wait 1 second after each tag.
+        for i in range(start, end + 1):
+            await printC(ch, "?tag del {0}".format(i))
+            await asyncio.sleep(0.75)
+
+    ### ASKS YUUDACHI SHOW !MEME TAG ###
+    elif msg == "!tag meme":
+        await printC(ch, "?tag !meme")
+
+
     ################################ CLEANING UP #################################
 
     # Use !quit to tell it to quit. Only authorised users can call this command
@@ -447,11 +541,11 @@ async def on_message(message):
     elif msg.startswith("!quit") and message.author.id == credentials["admin_ID"]:
         # Splits by spaces
         quit, space, reason = msg_or.partition(" ")
-        await printC(ch, "MemeBot has gone to sleep at {0}".format(time.strftime("%A, GMT %d %b %Y %H:%M:%S", time.gmtime())))
+        await printC(ch, "{0} has gone to sleep at {1}".format(client.user.name, time.strftime("%A, GMT %d %b %Y %H:%M:%S", time.gmtime())))
         # If we provided a reason, make it into string by rejoining with spaces in between the args 
         # (that were split by spaces before)
         if reason == "":
-            reason = "None"
+            reason = "To play with Zuikaku"            
 
         await printC(ch, "Reason for quitting: {0}".format(reason))
         await client.logout()
@@ -463,5 +557,7 @@ async def on_ready():
     print(client.user.name)
     print(client.user.id)
     print("------")
+    game = discord.Game(name="with Zuikaku")
+    await client.change_status(game=game)
 
-client.run(credentials["discord_email"], credentials["discord_pass"])
+client.run(credentials["bot_token"])
