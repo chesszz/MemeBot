@@ -180,6 +180,13 @@ async def on_message(message):
         await printC(ch, "Hi! {0} has logged in at {1}".format(client.user.name, time.strftime("%A, UTC %d %b %Y %H:%M:%S", time.gmtime())))
         say_hi = False
 
+    # If the string contains "aquors" and is NOT preceded by a letter and is NOT
+    # followed by a letter (i.e. is not hidden inside a word), then we correct the person.
+    # The letter "s" is also optional.
+    # It uses "if" because this check is completely independent of the commands.
+    if re.search(r"(?<![a-zA-Z])aquor(s?)(?![a-zA-Z])", msg) is not None:
+        await printC(ch, "***AQOURS***")
+
     ### PINGS THE BOT ###
     # MUST BE FIRST BECAUSE IT HAS IF INSTEAD OF ELIF #
     if msg == "!ping":
@@ -550,6 +557,9 @@ async def on_message(message):
         await printC(ch, "Reason for quitting: {0}".format(reason))
         await client.logout()
 
+    elif msg == "!exc":
+        raise Exception
+
 
 @client.event
 async def on_ready():
@@ -560,4 +570,10 @@ async def on_ready():
     game = discord.Game(name="with Zuikaku")
     await client.change_status(game=game)
 
-client.run(credentials["bot_token"])
+while True:
+    try:
+        client.run(credentials["bot_token"])
+    except Exception as e:
+        print("An exception was detected.")
+        print(e)
+        time.sleep(2)
