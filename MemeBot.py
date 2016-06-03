@@ -1,6 +1,7 @@
 import discord
 import random
 import os
+import sys
 import time
 import pytz
 import datetime
@@ -24,6 +25,12 @@ FORMATS = ("png", "gif", "jpg")
 
 global say_hi 
 say_hi = True
+
+curr_dir = os.getcwd()
+log_file = os.path.join(curr_dir, time.strftime("logs\\%Y-%m-%d-%H%M.txt"))
+# Create the file
+with open(log_file, "w") as f:
+    pass
 
 ########################################################################################
 ########################################################################################
@@ -552,28 +559,30 @@ async def on_message(message):
         # If we provided a reason, make it into string by rejoining with spaces in between the args 
         # (that were split by spaces before)
         if reason == "":
-            reason = "To play with Zuikaku"            
+            #reason = "To play with Zuikaku"           
+            reason = "To update LL Wikia" 
 
         await printC(ch, "Reason for quitting: {0}".format(reason))
+        
+        print("Logged out at {0}".format(time.strftime("%A, %d %b %Y %H:%M:%S")))
         await client.logout()
-
+        
     elif msg == "!exc":
         raise Exception
 
 
 @client.event
 async def on_ready():
-    print("Logged in as")
-    print(client.user.name)
-    print(client.user.id)
+    print("Logged in at {0}".format(time.strftime("%A, %d %b %Y %H:%M:%S")))
+    print("Logged in as {0} with user ID {1}".format(client.user.name, client.user.id))
     print("------")
-    game = discord.Game(name="with Zuikaku")
+    f.flush()
+    game = discord.Game(name="Cardfight Vanguard")
     await client.change_status(game=game)
 
-while True:
-    try:
-        client.run(credentials["bot_token"])
-    except Exception as e:
-        print("An exception was detected.")
-        print(e)
-        time.sleep(2)
+## MAIN STARTS HERE
+with open(log_file, "a", 1) as f:
+    sys.stdout = f
+    sys.stderr = f
+    client.run(credentials["bot_token"])
+    
