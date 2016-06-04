@@ -1,1 +1,10 @@
+__pycache__/
+logs/
+.gitignore
+*.png
+*.p
+Betting.py
+bot_conversion.py  
+utility.py
 credentials.*
+discord_backup_codes.txt
